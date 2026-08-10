@@ -33,7 +33,7 @@ PACK="${SEEDRA_PACK:-full}"
 
 usage() {
   cat <<'USAGE'
-SEEDRAAI models + custom nodes installer
+SEEDRAAI models-only installer for the official Vast.ai template
 
 Usage:
   HF_TOKEN=hf_xxx bash install.sh --pack PACK [options]
@@ -49,16 +49,8 @@ Options:
   --revision REV         SEEDRAAI repository branch/tag/commit (default: main)
   --compat-aliases       Also create old workflow filenames
   --skip-external        Do not download external Wan 2.2 Animate model
-  --skip-nodes           Do not install workflow custom nodes (default)
-  --with-nodes           Explicitly install the verified custom-node bundle
-  --nodes-archive PATH   Use a local custom_nodes tar.gz instead of downloading it
-  --skip-node-deps       Extract custom nodes without installing Python dependencies
-  --skip-node-verify     Skip the ComfyUI custom-node import test
-  --node-deps-best-effort
-                         Report dependency failures but continue to import verification
-  --keep-node-backup     Keep replaced custom-node folders after a successful install
+  --skip-nodes           Accepted for compatibility; nodes are always untouched
   --force                Replace conflicting destination files
-  --repair-vhs-only      Repair duplicate VideoHelperSuite folders and exit
   --dry-run              Show the plan without downloading or changing files
   -h, --help             Show help
 
@@ -182,7 +174,9 @@ while [[ $# -gt 0 ]]; do
     --compat-aliases) COMPAT_ALIASES=1; shift ;;
     --skip-external) SKIP_EXTERNAL=1; shift ;;
     --skip-nodes) SKIP_NODES=1; shift ;;
-    --with-nodes) SKIP_NODES=0; shift ;;
+    --with-nodes)
+      echo "Error: V18 is models-only and never installs or changes custom nodes." >&2
+      exit 2 ;;
     --nodes-archive)
       [[ $# -ge 2 ]] || { echo "Error: --nodes-archive requires a value." >&2; exit 2; }
       CUSTOM_NODES_LOCAL="$2"; shift 2 ;;
@@ -192,12 +186,18 @@ while [[ $# -gt 0 ]]; do
     --node-deps-best-effort) NODE_DEPS_STRICT=0; shift ;;
     --keep-node-backup) KEEP_NODE_BACKUP=1; shift ;;
     --force) FORCE=1; shift ;;
-    --repair-vhs-only) REPAIR_VHS_ONLY=1; shift ;;
+    --repair-vhs-only)
+      echo "Error: V18 is models-only and never repairs or changes custom nodes." >&2
+      exit 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+# V18 is deliberately models-only. Environment variables cannot enable node work.
+SKIP_NODES=1
+REPAIR_VHS_ONLY=0
 
 PACK="${PACK,,}"
 case "$PACK" in
@@ -366,17 +366,7 @@ else
 fi
 printf '=============================================\n\n'
 
-# This preflight is intentionally unconditional: model-only installs must also
-# repair a duplicate VHS extension already present in a Vast/RunPod template.
-if [[ "$SKIP_NODES" == "1" || "$REPAIR_VHS_ONLY" == "1" ]]; then
-  sanitize_vhs_duplicates 0
-else
-  sanitize_vhs_duplicates 1
-fi
-if [[ "$REPAIR_VHS_ONLY" == "1" ]]; then
-  echo "VHS duplicate repair check complete."
-  exit 0
-fi
+echo "[NODES] Untouched (models-only installer)."
 
 if [[ "$DRY_RUN" != "1" && -z "$HF_TOKEN" ]]; then
   echo "Error: SEEDRAAI/SEEDRAAI is gated and requires HF_TOKEN." >&2
