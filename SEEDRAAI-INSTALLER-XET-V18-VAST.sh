@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="18.0.0"
-BUILD="vast-template-lock-2026-08-10"
+VERSION="18.1.0"
+BUILD="minimaxh3-pack-2026-08-20"
 EXPECTED_VAST_TEMPLATE_HASH="32a4536b01049d45f3d3a9350369a0d4"
 REPO_ID="${SEEDRA_REPO_ID:-SEEDRAAI/SEEDRAAI}"
 REVISION="${SEEDRA_REVISION:-main}"
@@ -39,7 +39,7 @@ Usage:
   HF_TOKEN=hf_xxx bash install.sh --pack PACK [options]
 
 Packs:
-  full, motion, ltx, studio, social, nsfw
+  full, motion, ltx, studio, social, nsfw, minimaxh3
 
 Options:
   --pack PACK            Model pack to install (default: full)
@@ -201,8 +201,11 @@ REPAIR_VHS_ONLY=0
 
 PACK="${PACK,,}"
 case "$PACK" in
-  full|motion|ltx|studio|social|nsfw) ;;
-  *) echo "Error: invalid pack '$PACK'. Use: full, motion, ltx, studio, social, nsfw." >&2; exit 2 ;;
+  minimax-h3|minimax_h3) PACK="minimaxh3" ;;
+esac
+case "$PACK" in
+  full|motion|ltx|studio|social|nsfw|minimaxh3) ;;
+  *) echo "Error: invalid pack '$PACK'. Use: full, motion, ltx, studio, social, nsfw, minimaxh3." >&2; exit 2 ;;
 esac
 
 verify_vast_template
@@ -359,7 +362,7 @@ if [[ "$SKIP_NODES" != "1" ]]; then
   printf ' Node deps    : %s\n' "$([[ "$SKIP_NODE_DEPS" == "1" ]] && echo skipped || ([[ "$NODE_DEPS_STRICT" == "1" ]] && echo strict || echo best-effort))"
   printf ' Node verify  : %s\n' "$([[ "$SKIP_NODE_VERIFY" == "1" ]] && echo skipped || echo enabled)"
 fi
-if [[ "$SKIP_EXTERNAL" == "1" || "$PACK" == "social" || "$PACK" == "ltx" || "$PACK" == "nsfw" ]]; then
+if [[ "$SKIP_EXTERNAL" == "1" || "$PACK" == "social" || "$PACK" == "ltx" || "$PACK" == "nsfw" || "$PACK" == "minimaxh3" ]]; then
   printf ' External Wan  : skipped\n'
 else
   printf ' External Wan  : enabled\n'
@@ -541,6 +544,7 @@ ALL_MODEL_FOLDERS: dict[str, str] = {
 }
 
 PACK_MODELS: dict[str, set[str]] = {
+    "minimaxh3": set(),
     "motion": {
         "SEEDRA_CelestialMotion_Ace.safetensors",
         "SEEDRA_CryoDetail_K7.safetensors",
@@ -1031,6 +1035,21 @@ deps = [
     ("Kijai/sam2-safetensors", "sam2.1_hiera_base_plus.safetensors", "models/sam2/sam2.1_hiera_base_plus.safetensors", "sam2.1_hiera_base_plus.safetensors"),
 ]
 
+# MiniMax H3 is a standalone public pack. Keeping it separate avoids adding
+# roughly 73 GiB to the existing FULL product while still using the same V18
+# downloader, Vast.ai template lock, Xet profile and idempotent link handling.
+MINIMAXH3_DEPS = [
+    ("Comfy-Org/MiniMax-H3", "diffusion_models/minimax_h3_ref2va_int8_convrot.safetensors", "models/diffusion_models/minimax_h3_ref2va_int8_convrot.safetensors", "minimax_h3_ref2va_int8_convrot.safetensors"),
+    ("Comfy-Org/MiniMax-H3", "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors", "models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors", "minimax_h3_fl2va_pruned_int8_convrot.safetensors"),
+    ("Comfy-Org/MiniMax-H3", "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"),
+    ("Comfy-Org/MiniMax-H3", "vae/minimax_h3_audio_vae_fp32.safetensors", "models/vae/minimax_h3_audio_vae_fp32.safetensors", "minimax_h3_audio_vae_fp32.safetensors"),
+    ("Comfy-Org/MiniMax-H3", "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "models/loras/MINIMAX/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"),
+    ("Comfy-Org/MiniMax-H3", "loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors", "models/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors", "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors"),
+    ("Kijai/MiniMax-H3-experimental", "minimax_h3_video_vae_int8_convrot.safetensors", "models/vae/minimax_h3_video_vae_int8_convrot.safetensors", "minimax_h3_video_vae_int8_convrot.safetensors"),
+    ("Bingsu/adetailer", "face_yolov8m.pt", "models/ultralytics/bbox/face_yolov8m.pt", "face_yolov8m.pt"),
+    ("marduk191/rife", "rife49.pth", "custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife/rife49.pth", "rife49.pth"),
+]
+
 # Download only public dependencies actually used by the selected shop pack.
 # The FULL product also contains PERSONA and SWITCH as current-pack bonuses.
 UPSTREAM_BY_PACK = {
@@ -1060,7 +1079,9 @@ UPSTREAM_BY_PACK = {
     },
 }
 
-if pack != "full":
+if pack == "minimaxh3":
+    deps = MINIMAXH3_DEPS
+elif pack != "full":
     selected_upstream = UPSTREAM_BY_PACK[pack]
     deps = [dep for dep in deps if dep[3] in selected_upstream]
 
